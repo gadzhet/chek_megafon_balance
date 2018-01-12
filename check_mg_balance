@@ -26,6 +26,7 @@ def enter_to_lk(url, api):
     try:
         client.get(url, timeout=10)
     except Exception:
+        # I think that network trouble on nagios server it's not warning or critical status for this check.
         print('Connection error.')
         raise ERRORS.get('OK')
     LOGIN_DATA['CSRF'] = client.cookies['CSRF-TOKEN']
