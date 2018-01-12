@@ -1,0 +1,55 @@
+#!/usr/bin/python -W ignore::DeprecationWarning
+# -*- coding: utf-8 -*-
+from time import time
+import requests
+from ast import literal_eval
+from argparse import ArgumentParser
+import urllib3
+urllib3.disable_warnings()
+
+cli_parse = ArgumentParser()
+cli_parse.add_argument('-u', '--user', type=int, help='User name. Format 10 digits.', required=True)
+cli_parse.add_argument('-p', '--password', type=str, help='Password for lk.megafon.ru', required=True)
+cli_parse.add_argument('-c', '--critical', type=int, help='Critical balance. Default 500', required=False)
+cli_args = cli_parse.parse_args()
+
+LOGIN_DATA = {'j_username': cli_args.user,
+              'j_password': cli_args.password}
+
+ERRORS = {'OK': SystemExit(0),
+          'WARNING': SystemExit(1),
+          'CRITICAL': SystemExit(2)}
+
+
+def enter_to_lk(url, api):
+    client = requests.session()
+    try:
+        client.get(url, timeout=10)
+    except Exception:
+        print('Connection error.')
+        raise ERRORS.get('OK')
+    LOGIN_DATA['CSRF'] = client.cookies['CSRF-TOKEN']
+    client.post(url, data=LOGIN_DATA, headers=dict(Referer=url))
+    s = client.get('{0}CSRF={1}&_={2}'.format(api, LOGIN_DATA.get('CSRF'), int(time()) * 1000))
+    errors = dict(literal_eval(s.text)).get('errors')
+    if errors:
+        try:
+            errors = dict(errors[0])
+            print('{0}. {1}. Check login or password'.format(errors.get('message'), errors.get('id')))
+        except ValueError:
+            print('No answer.')
+            raise ERRORS.get('WARNING')
+        raise ERRORS.get('WARNING')
+    balance = dict(literal_eval(s.text)).get('balance')
+    if cli_args.critical:
+        if balance < cli_args.critical:
+            print('Низкий баланс. {0} руб'.format(balance))
+            raise ERRORS.get('CRITICAL')
+    else:
+        if balance < 500:
+            print('Низкий баланс. {0} руб'.format(balance))
+            raise ERRORS.get('CRITICAL')
+    print('Баланс {0} руб.'.format(balance))
+
+
+enter_to_lk('https://lk.megafon.ru/dologin/', 'https://lk.megafon.ru/api/lk/balance/get?')
